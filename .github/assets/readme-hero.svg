@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="420" viewBox="0 0 1120 420" role="img" aria-labelledby="title desc">
+  <title id="title">Rufajx temperature control system overview</title>
+  <desc id="desc">A controller for real-time hot-air heater temperature measurement and proportional control.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#183d35" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#1f9d87"/>
+    </marker>
+  </defs>
+
+  <rect width="1120" height="420" rx="30" fill="#f4f7f2"/>
+  <path d="M0 82 Q245 12 492 70 T1120 46 V0 H0 Z" fill="#eee8dc" opacity="0.72"/>
+  <path d="M0 310 Q275 232 550 312 T1120 286 V420 H0 Z" fill="#dcefe5"/>
+
+  <rect x="68" y="58" width="984" height="284" rx="24" fill="#ffffff" filter="url(#shadow)"/>
+
+  <rect x="92" y="82" width="300" height="236" rx="20" fill="#123c35"/>
+  <circle cx="132" cy="124" r="20" fill="#37c5a2"/>
+  <path d="M126 113 v17 a8 8 0 1 0 12 7 v-24" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <text x="164" y="120" fill="#a9d4c9" font-family="Segoe UI,Arial,sans-serif" font-size="13" letter-spacing="1.2">RUFAJX</text>
+  <text x="116" y="166" fill="#ffffff" font-family="Segoe UI,Arial,sans-serif" font-size="27" font-weight="700">Temperature</text>
+  <text x="116" y="199" fill="#ffffff" font-family="Segoe UI,Arial,sans-serif" font-size="27" font-weight="700">Control System</text>
+  <text x="116" y="229" fill="#a9d4c9" font-family="Segoe UI,Arial,sans-serif" font-size="14">Hot-air heater control board</text>
+  <rect x="116" y="251" width="132" height="32" rx="16" fill="#37c5a2"/>
+  <text x="182" y="272" text-anchor="middle" fill="#0d302b" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700">REAL-TIME PID</text>
+  <rect x="264" y="251" width="100" height="32" rx="16" fill="#214f47"/>
+  <text x="314" y="272" text-anchor="middle" fill="#d3e8e2" font-family="Segoe UI,Arial,sans-serif" font-size="12">200–600 °C</text>
+
+  <path d="M464 152 C500 116 514 116 546 116" fill="none" stroke="#8267c7" stroke-width="2" stroke-dasharray="5 6"/>
+  <path d="M654 116 C686 116 700 116 730 116" fill="none" stroke="#8267c7" stroke-width="2" stroke-dasharray="5 6"/>
+  <path d="M838 116 C870 116 884 128 900 152" fill="none" stroke="#8267c7" stroke-width="2" stroke-dasharray="5 6"/>
+
+  <rect x="432" y="84" width="196" height="72" rx="14" fill="#f7faf8" stroke="#dce9e4"/>
+  <circle cx="458" cy="108" r="8" fill="#f3b75d"/>
+  <text x="476" y="111" fill="#6c7c77" font-family="Segoe UI,Arial,sans-serif" font-size="12">SENSOR</text>
+  <text x="456" y="139" fill="#183d35" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="700">K-Type</text>
+
+  <rect x="650" y="84" width="196" height="72" rx="14" fill="#f7faf8" stroke="#dce9e4"/>
+  <circle cx="676" cy="108" r="8" fill="#8267c7"/>
+  <text x="694" y="111" fill="#6c7c77" font-family="Segoe UI,Arial,sans-serif" font-size="12">CONTROLLER</text>
+  <text x="674" y="139" fill="#183d35" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="700">STM32C071</text>
+
+  <rect x="868" y="84" width="160" height="72" rx="14" fill="#f7faf8" stroke="#dce9e4"/>
+  <circle cx="894" cy="108" r="8" fill="#37c5a2"/>
+  <text x="912" y="111" fill="#6c7c77" font-family="Segoe UI,Arial,sans-serif" font-size="12">LINK</text>
+  <text x="892" y="139" fill="#183d35" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="700">USB-C</text>
+
+  <rect x="432" y="190" width="310" height="100" rx="16" fill="#eef7f3"/>
+  <text x="456" y="216" fill="#557069" font-family="Segoe UI,Arial,sans-serif" font-size="12" letter-spacing="0.8">CONTROL LOOP</text>
+  <text x="456" y="248" fill="#183d35" font-family="Segoe UI,Arial,sans-serif" font-size="22" font-weight="700">Fast heat-up + PID hold</text>
+  <text x="456" y="273" fill="#6b7f79" font-family="Segoe UI,Arial,sans-serif" font-size="13">Thermal-inertia-aware regulation</text>
+
+  <path d="M752 240 H786" fill="none" stroke="#1f9d87" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <rect x="800" y="190" width="228" height="100" rx="16" fill="#fff7e8"/>
+  <text x="824" y="216" fill="#8b7956" font-family="Segoe UI,Arial,sans-serif" font-size="12" letter-spacing="0.8">OUTPUT</text>
+  <text x="824" y="250" fill="#183d35" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="700">0–3.3 V</text>
+  <text x="824" y="274" fill="#7e745f" font-family="Segoe UI,Arial,sans-serif" font-size="13">Filtered proportional command</text>
+</svg>
