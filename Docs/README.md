@@ -1,71 +1,131 @@
-# Rufajx Temperature Control System
+# Rufajx Temperature-Control Board
 
-## Purpose
+## 1. Purpose
 
-This project is a compact controller board for a K-type thermocouple heating system. Its intended process-temperature range is approximately 200–600 °C. The board measures temperature, runs the control algorithm, and provides a 0–3.3 V proportional command to an external heater driver or machine controller.
+This board is the measurement and command controller for a Rufajx industrial hot-air machine. It is designed to:
 
-The PCB does not switch heater power directly. The external heater power stage must provide suitable isolation, current capacity, over-temperature protection, and an independent emergency shutdown path.
+1. measure an insulated-junction K-type thermocouple;
+2. regulate an approximately 200–600 °C process using a direction-aware state machine, short-horizon thermal prediction, feed-forward, and gain-scheduled PI/PID control;
+3. produce a monitored 0–5 V heating command;
+4. expose USB for firmware/service communication and SWD for recovery and debugging; and
+5. provide a normally closed relay contact intended to interrupt an external 220 VAC circuit.
 
-## Main Functions
+The 0–5 V output commands the external machine controller. P4 is a separate hazardous-mains contact path and is not part of the analog-output circuit.
 
-- K-type thermocouple measurement through a MAX6675 converter.
-- Closed-loop temperature control on an STM32C071G8U6 MCU.
-- Fast warm-up followed by PID regulation with thermal-inertia compensation.
-- Filtered 0–3.3 V analog command generated from MCU PWM.
-- USB-C device connection for firmware download and USB CDC diagnostics.
-- Manual BOOT and RESET buttons for recovery and system-memory DFU entry.
-- Operation from either USB 5 V or an external 24 V control supply.
-- Input protection for USB and 24 V power paths.
+## 2. Current Design Baseline
 
-## System Overview
+This documentation describes the latest live EasyEDA design named `PCB2`, inspected on 2026-08-15.
+
+| Item | Current implementation |
+|---|---|
+| MCU | U5 STM32G0B1CBT6N, LQFP-48 N pinout |
+| Temperature converter | U1 MAX6675ISA+T |
+| Qualified probe type | K-type, insulated/ungrounded junction |
+| Temperature command range | Approximately 200–600 °C |
+| Analog command | 0–5 V at P2 |
+| DAC source | PA4 / DAC1_OUT1 using the internal 2.5 V VREFBUF |
+| Output amplifier | U3 TLV9351IDBVR, non-inverting gain 2.05 |
+| Output verification | PA0 ADC feedback sampled after R11 |
+| USB | USB 2.0 Type-C device |
+| Debug/programming | 5-pin SWD header, BOOT button, RESET button |
+| Primary supply | Nominal, stable 24 V DC |
+| Alternate service supply | USB 5 V |
+| MCU supply domains | VDD/VDDA and VDDIO2 at 3.3 V; VSS/VSSA and VSS at GND |
+| PCB CAD status | Strict EasyEDA DRC: 0 reported violations under the current rules |
+| 220 VAC release status | Blocked pending relay/footprint isolation redesign and mains-specific rule verification |
+
+## 3. System Signal Flow
 
 ```text
-K-type thermocouple
+Insulated K-type probe
         |
         v
-MAX6675 ---- SPI ---- STM32C071 ---- PWM ---- RC filter ---- 0–3.3 V output
-                         |
-                         +---- USB-C: DFU / CDC diagnostics
-
-24 V input ---- protection ---- 5 V converter ----+
-                                                   +---- diode OR ---- 5 V ---- 3.3 V LDO
-USB-C VBUS ---- protection ------------------------+
+Low-leakage ESD + 47 ohm / 100 nF input filter
+        |
+        v
+MAX6675 --> STM32G0B1 --> validation --> predictive state machine / PI/PID
+                                            |
+                                            v
+                                  2.5 V DAC on PA4
+                                            |
+                                            v
+                              TLV9351 gain 2.05 + R11
+                                            |
+                                            +--> P2: 0–5 V output
+                                            |
+                                            +--> divider/filter --> PA0 ADC feedback
 ```
 
-## External Connections
+The normally closed relay is separate from P2. P4 is a 220 VAC interruption contact and must be treated as hazardous live during layout, assembly, test, and service.
+
+## 4. External Connectors
 
 | Connector | Pin | Recommended silkscreen | Function |
 |---|---:|---|---|
-| P1 | 1 | `K+` | K-type thermocouple positive input |
-| P1 | 2 | `K-` | K-type thermocouple negative input; tied to board ground in the present design |
-| P2 | 1 | `GND` | Proportional-output reference |
-| P2 | 2 | `OUT` | Filtered 0–3.3 V heater command |
-| P3 | 1 | `GND` | 24 V supply return |
-| P3 | 2 | `+24V` | External 24 V control-power input |
+| P1 | 1 | K+ | K-type thermocouple positive lead |
+| P1 | 2 | K- | K-type negative lead; electrically tied to board GND |
+| P2 | 1 | GND | 0–5 V command return |
+| P2 | 2 | 0-5V OUT | Heating command output |
+| P3 | 1 | GND | 24 V input return |
+| P3 | 2 | +24V | Nominal stable 24 V input |
+| P4 | 1 | NC (L) | Hazardous 220 VAC normally closed contact |
+| P4 | 2 | COM (L) | Hazardous 220 VAC common contact |
+| H1 | 1 | GND | SWD ground |
+| H1 | 2 | 3V3 | Target reference voltage |
+| H1 | 3 | NRST | Target reset |
+| H1 | 4 | SWCLK/BOOT0 | SWD clock and BOOT0 strap |
+| H1 | 5 | SWDIO | SWD bidirectional data |
 
-## Documentation
+## 5. Power Architecture
 
-- [Hardware](HARDWARE.md)
-- [MCU pinout](PINOUT.md)
-- [PCB design and release status](PCB_DESIGN.md)
-- [Firmware development guide](FIRMWARE_GUIDE.md)
+- P3 enters through F3, D7 reverse-polarity protection, D8 SMAJ24A transient suppression, and C16/C17 bypassing.
+- U2 K7805-500R3 converts `24V_PROTECTED` to `5V_FROM_24`.
+- USB VBUS has its own resettable fuse, TVS, and input capacitance.
+- D5 and D6 diode-OR the 24 V-derived 5 V and USB 5 V into `5V_SYSTEM`.
+- LDO1 ME6211C33M5G-N creates `3V3_SYSTEM`.
+- U3 and the 24 V relay coil use `24V_PROTECTED`.
+- U5 pin 31 VDDIO2 is tied to `3V3_SYSTEM`; pin 30 VSS is tied to GND. C24 100 nF is present. Add a local 4.7 µF capacitor at this supply pair before production release.
 
-## Current Project Status
+The K7805-500R3 is retained only because the machine supply has been confirmed stable. Normal operation must remain below its 32 V input limit with margin. The design is not specified for automotive load dump or other high-energy surge environments.
 
-The schematic and two-layer PCB layout exist in the EasyEDA project. The PCB is not yet documented as production-ready: the latest automated DRC run reported two USB-C footprint clearance errors and one schematic-to-PCB netlist mismatch. Resolve these items and repeat DRC before generating production files.
+## 6. Control and Safety Model
 
-## Operating and Safety Limits
+The constant-speed fan makes the plant asymmetric: heating is active and fast, while cooling is passive and slower. Firmware therefore uses explicit states:
 
-- The 200–600 °C figure is the controlled process temperature, not the allowed PCB temperature.
-- Keep the PCB, MAX6675 cold junction, connectors, and wiring outside the hot zone.
-- Use a K-type probe and cable insulation rated above the maximum process temperature.
-- The MAX6675 provides 0.25 °C digital resolution and supports measurements up to 1024 °C, but total system accuracy also depends on the thermocouple, cold-junction temperature, layout, noise, and calibration.
-- On sensor-open, invalid-reading, firmware-watchdog, or over-temperature faults, force the output to 0 V.
-- Do not rely on software as the only heater safety mechanism.
+- startup/self-test and `IDLE`;
+- full-power rapid warm-up;
+- predicted heating approach;
+- zero-power passive cooldown;
+- predicted cooldown braking;
+- feed-forward plus gain-scheduled PI/PID hold;
+- latched fault.
 
-## Primary References
+The primary performance objective is minimum time to enter and remain within the configured stability band. Engineering defaults are ±2 °C for 30 s and a 10 °C cooling-undershoot soft target. Heating overshoot is logged but is not the primary optimization target because excessive stored heat normally increases total settling time.
 
-- [STM32C071G8 product page](https://www.st.com/en/microcontrollers-microprocessors/stm32c071g8.html)
-- [STM32C071x8/xB datasheet](https://www.st.com/resource/en/datasheet/stm32c071cb.pdf)
-- [MAX6675 product page and datasheet](https://www.analog.com/en/products/max6675.html)
-- [STM32 system-memory boot modes (AN2606)](https://www.st.com/resource/en/application_note/an2606-stm32-microcontroller-system-memory-boot-mode-stmicroelectronics.pdf)
+The USB service panel exposes bounded tuning profiles. Live gains and feed-forward values may use bumpless updates; prediction, filter, state, and safety settings apply only in `IDLE` with P2 below 0.1 V. MCU validation, a 600 °C setpoint ceiling, an 800 °C absolute ceiling, the 0–5 V clamp, and immediate fault-to-zero behavior cannot be bypassed by the browser.
+
+Mandatory faults include an open, stale, or implausible thermocouple; the configurable absolute overtemperature limit; temperature at least 70 °C above the setpoint by default; DAC/ADC feedback mismatch; invalid calibration; and watchdog/reset faults. Fault response writes PA4 DAC to zero immediately, verifies P2 using PA0 ADC, and requests the relay to open when 24 V is available.
+
+Manual reset requires 5 s of valid sensor data, P2 below 0.1 V, and temperature below the setpoint plus a default 30 °C margin. Reset returns to `IDLE` and never resumes heating automatically.
+
+The relay is normally closed. With its coil de-energized, P4 NC and COM are connected; energizing the coil opens the 220 VAC path. Loss of board power therefore closes rather than opens this path. Software, MCU power, and this relay cannot replace a separate thermostat, thermal fuse, safety contactor, or equivalent machine-level protection.
+
+## 7. Mains-Isolation Status
+
+The current board has top- and bottom-layer GND pours plus three multi-layer `NO_POURS` regions around the relay area. These regions prevent copper-pour fill only; they do not forbid traces, vias, pads, or manual fills.
+
+The measured relay contact-to-coil pad edge gap is approximately 3.53 mm. The project uses a conservative production target of at least 8 mm between hazardous mains copper and all SELV copper until the applicable product standard establishes the final value. The current DRC has no explicit mains-to-SELV net rule, so zero reported violations do not prove mains safety.
+
+The board is not ready for 220 VAC production release until the relay/footprint and PCB isolation barrier are redesigned and reviewed. See [PCB_REQUIRED_FIXES.md](PCB_REQUIRED_FIXES.md).
+
+## 8. Documentation Map
+
+- [HARDWARE.md](HARDWARE.md): electrical implementation and major parts
+- [PINOUT.md](PINOUT.md): MCU, connector, and debug pin map
+- [PCB_DESIGN.md](PCB_DESIGN.md): verified live layout state and manufacturing rules
+- [FIRMWARE_GUIDE.md](FIRMWARE_GUIDE.md): PlatformIO/Arduino architecture, predictive control, calibration, service panel, and DFU
+- [PCB_REQUIRED_FIXES.md](PCB_REQUIRED_FIXES.md): mandatory production-release actions in Chinese
+
+## 9. Release Boundary
+
+The low-voltage measurement, USB, DAC, ADC-feedback, and power functions form a coherent engineering baseline. The full board is not production-approved for 220 VAC while the isolation blockers remain. Do not infer electrical safety, heater safety, EMC compliance, analog accuracy, or relay load capability solely from a clean CAD DRC. Complete every P0 item and record first-article and machine-level evidence before approving a batch.
