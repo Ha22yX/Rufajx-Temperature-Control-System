@@ -7,14 +7,15 @@ This board is the measurement and command controller for a Rufajx industrial hot
 1. measure an insulated-junction K-type thermocouple;
 2. regulate an approximately 200–600 °C process using a direction-aware state machine, short-horizon thermal prediction, feed-forward, and gain-scheduled PI/PID control;
 3. produce a monitored 0–5 V heating command;
-4. expose USB for firmware/service communication and SWD for recovery and debugging; and
-5. provide a normally closed relay contact intended to interrupt an external 220 VAC circuit.
+4. expose USB for firmware/service communication and SWD for recovery and debugging;
+5. provide a non-isolated, half-duplex RS-485 field interface; and
+6. provide a normally closed relay contact intended to interrupt an external 220 VAC circuit.
 
 The 0–5 V output commands the external machine controller. P4 is a separate hazardous-mains contact path and is not part of the analog-output circuit.
 
 ## 2. Current Design Baseline
 
-This documentation describes the latest live EasyEDA design named `PCB2`, inspected on 2026-08-15.
+This documentation describes the latest live EasyEDA design named `PCB2`, inspected on 2026-08-16.
 
 | Item | Current implementation |
 |---|---|
@@ -27,6 +28,9 @@ This documentation describes the latest live EasyEDA design named `PCB2`, inspec
 | Output amplifier | U3 TLV9351IDBVR, non-inverting gain 2.05 |
 | Output verification | PA0 ADC feedback sampled after R11 |
 | USB | USB 2.0 Type-C device |
+| RS-485 | U6 THVD1400DR on PA1 DE, PA2 TX, and PA3 RX; A/B at P5 |
+| RS-485 termination | R22 120 ohm, optional and populated only at a selected physical bus end |
+| RS-485 isolation | None; the installation shares signal ground outside P5 |
 | Debug/programming | 5-pin SWD header, BOOT button, RESET button |
 | Primary supply | Nominal, stable 24 V DC |
 | Alternate service supply | USB 5 V |
@@ -70,13 +74,25 @@ The normally closed relay is separate from P2. P4 is a 220 VAC interruption cont
 | P3 | 2 | +24V | Nominal stable 24 V input |
 | P4 | 1 | NC (L) | Hazardous 220 VAC normally closed contact |
 | P4 | 2 | COM (L) | Hazardous 220 VAC common contact |
+| P5 | 1 | B | RS-485 B differential line |
+| P5 | 2 | A | RS-485 A differential line |
 | H1 | 1 | GND | SWD ground |
 | H1 | 2 | 3V3 | Target reference voltage |
 | H1 | 3 | NRST | Target reset |
 | H1 | 4 | SWCLK/BOOT0 | SWD clock and BOOT0 strap |
 | H1 | 5 | SWDIO | SWD bidirectional data |
 
-## 5. Power Architecture
+## 5. RS-485 Interface Boundary
+
+U6 is a THVD1400DR half-duplex transceiver powered from `3V3_SYSTEM`. PA1 controls the tied `/RE` and `DE` pins, PA2 is USART2 TX, and PA3 is USART2 RX. R21 10 kohm pulls the shared enable node low so that the driver is disabled and the receiver remains enabled while the MCU is resetting or its pin is high impedance.
+
+R19 and R20 provide 10 ohm series resistance in the B and A paths. D4 SM712-02HTG protects both lines to board GND. P5 pin 1 is B and pin 2 is A.
+
+R22 120 ohm is optional bus termination. Populate it only when this board is deliberately selected as one of the two physical endpoints of a passive RS-485 bus. A machine may divide the bus into several branches, but every branch endpoint must not automatically receive a termination resistor. Record the two terminated endpoints in the machine wiring definition.
+
+This RS-485 port is not isolated and P5 contains no ground pin. The installation is expected to provide a shared signal-ground reference by another connection. That shared ground does not eliminate ground-offset or common-mode limits: the voltage at U6 A and B relative to board GND must remain inside the THVD1400 datasheet limits. Use isolated RS-485 if the installation cannot guarantee this condition.
+
+## 6. Power Architecture
 
 - P3 enters through F3, D7 reverse-polarity protection, D8 SMAJ24A transient suppression, and C16/C17 bypassing.
 - U2 K7805-500R3 converts `24V_PROTECTED` to `5V_FROM_24`.
@@ -88,7 +104,7 @@ The normally closed relay is separate from P2. P4 is a 220 VAC interruption cont
 
 The K7805-500R3 is retained only because the machine supply has been confirmed stable. Normal operation must remain below its 32 V input limit with margin. The design is not specified for automotive load dump or other high-energy surge environments.
 
-## 6. Control and Safety Model
+## 7. Control and Safety Model
 
 The constant-speed fan makes the plant asymmetric: heating is active and fast, while cooling is passive and slower. Firmware therefore uses explicit states:
 
@@ -110,7 +126,7 @@ Manual reset requires 5 s of valid sensor data, P2 below 0.1 V, and temperature 
 
 The relay is normally closed. With its coil de-energized, P4 NC and COM are connected; energizing the coil opens the 220 VAC path. Loss of board power therefore closes rather than opens this path. Software, MCU power, and this relay cannot replace a separate thermostat, thermal fuse, safety contactor, or equivalent machine-level protection.
 
-## 7. Mains-Isolation Status
+## 8. Mains-Isolation Status
 
 The current board has top- and bottom-layer GND pours plus three multi-layer `NO_POURS` regions around the relay area. These regions prevent copper-pour fill only; they do not forbid traces, vias, pads, or manual fills.
 
@@ -118,14 +134,14 @@ The measured relay contact-to-coil pad edge gap is approximately 3.53 mm. The pr
 
 The board is not ready for 220 VAC production release until the relay/footprint and PCB isolation barrier are redesigned and reviewed. See [PCB_REQUIRED_FIXES.md](PCB_REQUIRED_FIXES.md).
 
-## 8. Documentation Map
+## 9. Documentation Map
 
 - [HARDWARE.md](HARDWARE.md): electrical implementation and major parts
 - [PINOUT.md](PINOUT.md): MCU, connector, and debug pin map
 - [PCB_DESIGN.md](PCB_DESIGN.md): verified live layout state and manufacturing rules
-- [FIRMWARE_GUIDE.md](FIRMWARE_GUIDE.md): PlatformIO/Arduino architecture, predictive control, calibration, service panel, and DFU
+- [FIRMWARE_GUIDE.md](FIRMWARE_GUIDE.md): PlatformIO plus STM32Cube HAL/LL architecture, predictive control, calibration, USB/RS-485 service communication, and DFU
 - [PCB_REQUIRED_FIXES.md](PCB_REQUIRED_FIXES.md): mandatory production-release actions in Chinese
 
-## 9. Release Boundary
+## 10. Release Boundary
 
-The low-voltage measurement, USB, DAC, ADC-feedback, and power functions form a coherent engineering baseline. The full board is not production-approved for 220 VAC while the isolation blockers remain. Do not infer electrical safety, heater safety, EMC compliance, analog accuracy, or relay load capability solely from a clean CAD DRC. Complete every P0 item and record first-article and machine-level evidence before approving a batch.
+The low-voltage measurement, USB, non-isolated RS-485, DAC, ADC-feedback, and power functions form a coherent engineering baseline. The full board is not production-approved for 220 VAC while the isolation blockers remain. Do not infer electrical safety, heater safety, EMC compliance, field-bus robustness, analog accuracy, or relay load capability solely from a clean CAD DRC. Complete every P0 item and record first-article and machine-level evidence before approving a batch.

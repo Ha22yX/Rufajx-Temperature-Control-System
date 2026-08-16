@@ -6,29 +6,31 @@ The intended stack is:
 
 - Visual Studio Code;
 - PlatformIO;
-- STM32duino / Arduino framework;
+- STM32Cube HAL as the primary framework, with LL for timing-critical or low-overhead paths;
 - STM32CubeProgrammer for ROM DFU and recovery;
 - an ST-Link-compatible SWD probe for initial programming and debugging.
 
 The exact hardware target is **STM32G0B1CBT6N, LQFP-48**. The `N` package pinout adds the VDDIO2/VSS supply pair. This is a hardware supply difference, but the firmware device family, flash size, linker layout, USB peripheral, and pin assignments must still match STM32G0B1CB.
 
-The custom PCB may not have a built-in PlatformIO board ID. If necessary, commit a project-specific manifest named `rufajx_g0b1cb`. Do not silently build for an unrelated Nucleo board.
+The custom PCB may not have a built-in PlatformIO board ID. If necessary, commit a project-specific manifest named `rufajx_g0b1cb`. Do not silently build for an unrelated Nucleo board. The current repository does not yet contain firmware or a custom board manifest; these files must be added before claiming a buildable target.
+
+An RTOS is not required. Use a fixed-rate, non-blocking scheduler and keep the control algorithm as a testable C/C++ module.
 
 ```ini
 [env:rufajx_g0b1cb]
 platform = ststm32
-framework = arduino
+framework = stm32cube
 board = rufajx_g0b1cb
 upload_protocol = stlink
 debug_tool = stlink
 monitor_speed = 115200
 ```
 
-Lock the PlatformIO platform, STM32duino core, USB build flags, linker script, and board manifest after validation.
+Lock the PlatformIO platform, STM32CubeG0 package, compiler, USB middleware, linker script, and board manifest after validation.
 
 Primary references:
 
-- [STM32duino core](https://github.com/stm32duino/Arduino_Core_STM32)
+- [STM32CubeG0 firmware package](https://github.com/STMicroelectronics/STM32CubeG0)
 - [PlatformIO ST STM32 platform](https://docs.platformio.org/en/latest/platforms/ststm32.html)
 - [STM32G0B1 datasheet](https://www.st.com/resource/en/datasheet/stm32g0b1me.pdf)
 - [STM32 system-memory boot mode, AN2606](https://www.st.com/resource/en/application_note/an2606-stm32microcontroller-system-memory-boot-mode-stmicroelectronics.pdf)
@@ -43,6 +45,9 @@ Primary references:
 | Heating DAC | PA4 | DAC1_OUT1 |
 | Heating-output feedback | PA0 | ADC input |
 | Relay control | PB0 | GPIO output, active high |
+| RS-485 direction | PA1 | USART2_RTS_DE, AF1, active-high transmit enable |
+| RS-485 transmit | PA2 | USART2_TX, AF1 |
+| RS-485 receive | PA3 | USART2_RX, AF1 |
 | USB D- | PA11 | USB FS |
 | USB D+ | PA12 | USB FS |
 | SWDIO | PA13 | SWD |
@@ -58,22 +63,24 @@ No firmware configuration replaces these physical supply connections.
 
 ## 3. Deterministic Startup
 
-Startup must default to no analog heating request:
+Startup must default to no analog heating request and no RS-485 drive:
 
 1. keep DAC disabled or at zero;
 2. configure PB0 low immediately; note that this leaves the normally closed 220 VAC relay path closed;
-3. initialize the independent watchdog;
-4. initialize clocks and USB;
-5. enable VREFBUF in 2.5 V mode;
-6. wait for the VREFBUF ready flag;
-7. calibrate and enable ADC;
-8. enable DAC1_OUT1 at zero;
-9. initialize MAX6675 pins with TC_CS high;
-10. collect valid temperature and output-feedback samples;
-11. run self-tests;
-12. enter IDLE only if all checks pass.
+3. configure PA1/RS485_DE low before USART initialization so the transmitter is disabled and the receiver is enabled;
+4. initialize the independent watchdog;
+5. initialize the verified system clock, HSI48/CRS path, and USB;
+6. enable VREFBUF in 2.5 V mode;
+7. wait for the VREFBUF ready flag;
+8. calibrate and enable ADC;
+9. enable DAC1_OUT1 at zero;
+10. initialize MAX6675 pins with TC_CS high;
+11. initialize USART2 and the bounded RS-485 parser;
+12. collect valid temperature and output-feedback samples;
+13. run self-tests;
+14. enter IDLE only if all checks pass.
 
-Do not enable heating merely because USB or 24 V is present. The normally closed relay cannot guarantee a safe startup state; independent machine protection must already be active.
+Do not enable heating merely because USB, RS-485, or 24 V is present. The normally closed relay cannot guarantee a safe startup state; independent machine protection must already be active.
 
 ## 4. Software Architecture
 
@@ -88,9 +95,10 @@ Do not enable heating merely because USB or 24 V is present. The normally closed
 | `safety` | Limits, watchdog, reset reason, fault latching |
 | `relay` | Explicit normally closed mains-relay semantics |
 | `usb_service` | USB CDC commands, telemetry, DFU request |
+| `rs485_transport` | USART2 half-duplex direction, framing, CRC, timeouts, and field commands |
 | `settings` | Versioned, CRC-protected calibration and tuning profiles |
 
-The control loop, parser, and logging must not block the 250 ms temperature schedule or watchdog service.
+The control loop, USB parser, RS-485 parser, and logging must not block the 250 ms temperature schedule or watchdog service. HAL callbacks and interrupts should enqueue bounded work; protocol parsing and telemetry formatting run outside interrupt context.
 
 ## 5. MAX6675 Acquisition
 
@@ -387,18 +395,41 @@ Never provide a service command that bypasses temperature, voltage, or fault lim
 
 Recommended 4 Hz telemetry fields are timestamp, setpoint, raw and filtered temperature, `dT/dt`, predicted temperature, state, DAC command, reconstructed P2 voltage, feed-forward, P/I/D terms, active tuning profile, and fault flags. USB disconnection must not stop the local controller or relax any safety check.
 
-## 11. USB DFU and Recovery
+## 11. RS-485 Field Interface
+
+U6 ties active-high DE and active-low /RE together. PA1 low is the reset and idle state: the transmitter is disabled and the receiver is enabled. PA1 high enables transmission and disables reception.
+
+Prefer the verified USART2 hardware driver-enable function on PA1 using HAL_RS485Ex_Init() or an equivalent LL configuration. Set DE polarity and assertion/deassertion times from oscilloscope measurements. If direction is controlled manually, assert PA1 before starting the frame and return it low only after the USART transmission-complete flag confirms that the final stop bit has left the shift register. TXE alone is not sufficient.
+
+The transport must provide:
+
+- a bounded receive buffer and maximum frame length;
+- address, function/command, payload length, and CRC validation;
+- inter-byte and complete-frame timeouts;
+- rejection of malformed, repeated, stale, or unauthorized writes;
+- rate-limited telemetry and diagnostics;
+- counters for CRC, framing, overrun, timeout, and bus-contention errors;
+- deterministic recovery to receive mode after timeout or reset.
+
+The application may use Modbus RTU or a versioned project-specific binary protocol; select and document one before implementation. Do not silently combine both interpretations on the same port.
+
+RS-485 may read telemetry, set a bounded setpoint, and stage validated tuning parameters. It must use the same authorization, range, state, CRC, and IDLE-only policies as USB. No field-bus command may bypass the 0–5 V clamp, overtemperature trips, sensor validation, fault latch, manual-reset gate, or watchdog.
+
+P5 carries A and B only. The hardware is non-isolated and relies on a verified common ground elsewhere in the machine. Firmware cannot correct excessive ground offset or common-mode voltage. Communications loss must be logged and handled according to the machine policy, but it must never disable local temperature safety or force an unsafe output.
+
+R22 120 ohm is populated only when this board is one of the two selected electrical bus ends. Termination is a machine-wiring/assembly decision, not a firmware setting.
+## 12. USB DFU and Recovery
 
 The STM32G0B1 system-memory bootloader supports USB DFU on PA11/PA12. The board routes these pins to USB-C and provides manual BOOT/RESET plus SWD recovery.
 
-### 11.1 Manual entry
+### 12.1 Manual entry
 
 1. hold BOOT;
 2. press and release RESET;
 3. release BOOT;
 4. connect with STM32CubeProgrammer in USB mode.
 
-### 11.2 Software-requested entry
+### 12.2 Software-requested entry
 
 A USB CDC `dfu` command may:
 
@@ -417,9 +448,9 @@ Never copy a boot address from another STM32 family. Test this path after every 
 
 Entering ROM DFU stops application safety control. Heating must already be disabled by an independent machine mechanism.
 
-## 12. Production Calibration and Plant Identification
+## 13. Production Calibration and Plant Identification
 
-### 12.1 Temperature
+### 13.1 Temperature
 
 Compare each probe/board combination, or the qualified sampling plan, against a traceable reference at:
 
@@ -429,7 +460,7 @@ Compare each probe/board combination, or the qualified sampling plan, against a 
 
 Record probe batch, fixture, airflow, soak time, board temperature, raw data, reference result, and residual error.
 
-### 12.2 0–5 V output
+### 13.2 0–5 V output
 
 With the actual machine input connected:
 
@@ -441,7 +472,7 @@ With the actual machine input connected:
 6. repeat at expected low/high board temperatures;
 7. define pass limits for offset, gain, nonlinearity, noise, and settling.
 
-### 12.3 Thermal plant
+### 13.3 Thermal plant
 
 Keep the fan at its normal fixed speed and log every 250 ms control sample. Begin at the lowest safe temperature and progress to higher temperatures only after the preceding test passes.
 
@@ -456,24 +487,26 @@ Keep the fan at its normal fixed speed and log every 250 ms control sample. Begi
 
 Do not optimize against heating overshoot alone. Compare parameter sets using total settling time while recording peak temperature, cooling undershoot, output saturation, and every safety margin.
 
-## 13. Bring-Up Order
+## 14. Bring-Up Order
 
 1. Visual inspection and resistance checks with power removed.
-2. Current-limited USB power; verify 5 V and 3.3 V only.
+2. Current-limited USB power; verify 5 V, 3.3 V, VDDIO2, and reset behavior.
 3. SWD chip identification, erase, program, reset, and debug.
 4. Verify VREF+ reaches 2.5 V after VREFBUF is enabled.
 5. Verify USB CDC enumeration and reset behavior.
-6. Test MAX6675 with a known insulated probe and open circuit.
-7. Apply current-limited 24 V; verify protected 24 V and 5 V conversion.
-8. Sweep P2 with a high-impedance load and compare ADC feedback.
-9. Verify PB0 high opens P4 NC-COM using safe low voltage only.
-10. Test manual DFU, software DFU, and SWD recovery.
-11. Complete the PCB mains-isolation redesign and safety review.
-12. Use an isolated/interlocked fixture for any 220 VAC relay test.
-13. Integrate with the machine at limited heating power.
-14. Identify the thermal plant and tune staged control only after sensor/output safety tests pass.
-
-## 14. Release Tests
+6. Hold RS485_DE low, initialize USART2, and verify receive-idle behavior.
+7. Test RS-485 transmit direction, final-stop-bit timing, CRC rejection, and automatic return to receive mode using safe short cabling.
+8. Test MAX6675 with a known insulated probe and open circuit.
+9. Apply current-limited 24 V; verify protected 24 V and 5 V conversion.
+10. Sweep P2 with a high-impedance load and compare ADC feedback.
+11. Verify PB0 high opens P4 NC-COM using safe low voltage only.
+12. Test manual DFU, software DFU, and SWD recovery.
+13. Complete the PCB mains-isolation redesign and safety review.
+14. Use an isolated/interlocked fixture for any 220 VAC relay test.
+15. Integrate with the machine at limited heating power.
+16. Validate the final RS-485 topology, cable, common-ground offset, selected termination, and error rate.
+17. Identify the thermal plant and tune staged control only after sensor/output safety tests pass.
+## 15. Release Tests
 
 Release evidence must cover:
 
@@ -493,6 +526,7 @@ Release evidence must cover:
 - watchdog and reset-reason handling;
 - active-high relay/open-contact behavior;
 - USB command bounds and malformed inputs;
+- RS-485 DE timing, framing/CRC/timeouts, malformed writes, bus contention, termination, common-mode, and communications-loss behavior;
 - manual DFU, software DFU, and SWD recovery;
 - USB-only, 24 V-only, and dual-source power cycling;
 - independent machine overtemperature shutdown;

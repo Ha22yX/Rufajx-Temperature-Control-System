@@ -1,108 +1,89 @@
 <div align="center">
 
-# Rufajx Temperature Control System
+# Rufajx Hot-Air Temperature Controller
 
-**A custom control board for real-time hot-air heater temperature measurement and proportional regulation.**
+**Industrial temperature acquisition, predictive control, and monitored 0–5 V command output.**
 
-[简体中文](README.zh-CN.md) · [Hardware](Docs/HARDWARE.md) · [Pinout](Docs/PINOUT.md) · [PCB Status](Docs/PCB_DESIGN.md) · [Firmware Guide](Docs/FIRMWARE_GUIDE.md)
+[简体中文](README.zh-CN.md) · [System](Docs/README.md) · [Hardware](Docs/HARDWARE.md) · [Pinout](Docs/PINOUT.md) · [PCB](Docs/PCB_DESIGN.md) · [Firmware](Docs/FIRMWARE_GUIDE.md)
 
-![STM32C071](https://img.shields.io/badge/MCU-STM32C071-03234B?style=flat-square)
-![Temperature](https://img.shields.io/badge/Target-200--600%C2%B0C-CB6C3D?style=flat-square)
-![Sensor](https://img.shields.io/badge/Sensor-K--Type%20%2B%20MAX6675-2C7A68?style=flat-square)
-![EDA](https://img.shields.io/badge/EDA-EasyEDA-5B63B7?style=flat-square)
-![Status](https://img.shields.io/badge/Status-PCB%20validation%20required-D39B32?style=flat-square)
+![MCU](https://img.shields.io/badge/MCU-STM32G0B1CBT6N-03234B?style=flat-square)
+![Temperature](https://img.shields.io/badge/Process-200--600%C2%B0C-CB6C3D?style=flat-square)
+![Output](https://img.shields.io/badge/Output-0--5V%20DAC-2C7A68?style=flat-square)
+![Interfaces](https://img.shields.io/badge/Interfaces-USB%20%2B%20RS--485-5B63B7?style=flat-square)
+![Status](https://img.shields.io/badge/Status-Engineering%20validation-D39B32?style=flat-square)
 
 </div>
 
-![Project overview image](.github/assets/readme-hero.svg)
+![Rufajx temperature-controller overview](.github/assets/readme-hero.svg)
 
-## Why This Exists
+## Purpose
 
-This project was developed for Rufajx, the user's father's company, to control the heating temperature of a hot-air machine in real time. A K-type thermocouple measures the process temperature, the MCU applies fast warm-up and PID control, and the board sends a filtered 0–3.3 V proportional command to the machine's external heater controller.
+This board was developed for Rufajx to control the heating temperature of an industrial hot-air machine. It reads an insulated-junction K-type thermocouple, runs a thermal-inertia-aware state machine with predictive PI/PID control, and sends a calibrated 0–5 V command to the machine controller.
 
-The board is the measurement and control layer. It does **not** switch heater power directly, and it must be combined with an independently protected power stage.
+The board is a measurement and command controller. It does not directly regulate heater power through P2. P4 is a separate normally closed relay contact in a hazardous 220 VAC path.
 
-## What Is Implemented
+## Current Hardware Baseline
 
-- K-type thermocouple conversion with MAX6675 cold-junction compensation.
-- STM32C071G8U6 control core with enough Flash, RAM, timers, SPI, and USB for this application.
-- Filtered 0–3.3 V command output generated from MCU PWM.
-- Native USB-C for ROM DFU recovery and planned USB CDC diagnostics.
-- USB 5 V and protected 24 V control-power inputs with diode ORing.
-- BOOT and RESET controls for first programming and recovery.
-- Hardware documentation for a 200–600 °C hot-air heating process.
+| Function | Implementation |
+|---|---|
+| Controller | STM32G0B1CBT6N, LQFP-48 |
+| Temperature input | MAX6675 plus insulated/ungrounded-junction K-type probe |
+| Analog command | PA4 DAC1_OUT1, 2.5 V VREFBUF, TLV9351 gain stage, 0–5 V at P2 |
+| Output verification | PA0 ADC feedback sampled after the P2 series resistor |
+| Service interface | USB 2.0 Type-C for ROM DFU and planned USB CDC |
+| Field communication | THVD1400DR non-isolated half-duplex RS-485 at P5 |
+| Programming/debug | 5-pin SWD header, BOOT, and RESET |
+| Safety contact | 24 V coil, normally closed 220 VAC relay contact at P4 |
+| Supply | Protected nominal 24 V input plus USB/24 V low-voltage source OR-ing |
+| Process target | Approximately 200–600 °C |
 
-## Hardware Stack
-
-| Layer | Component | Role |
-|---|---|---|
-| Temperature input | K-type thermocouple + MAX6675 | Cold-junction-compensated digital temperature acquisition |
-| Control | STM32C071G8U6 | Sampling, safety state machine, PID, PWM, USB |
-| Command output | PA8 PWM + 1 kΩ / 10 µF RC filter | High-impedance 0–3.3 V proportional signal |
-| Service interface | USB-C + USBLC6-2SC6 | DFU programming and USB CDC diagnostics |
-| Field power | 24 V protection + K7805-500R3 | Converts machine control power to 5 V |
-| Logic power | ME6211C33M5G-N | Generates the 3.3 V rail |
-| Design source | EasyEDA `.eprj2` | Editable schematic and PCB project |
-
-## Repository Contents
-
-```text
-.
-├── PCB Design/
-│   └── Rufajx温控系统.eprj2       # EasyEDA project
-├── Docs/
-│   ├── README.md                 # Detailed English project overview
-│   ├── HARDWARE.md               # Circuit blocks and component choices
-│   ├── PINOUT.md                 # MCU and connector pin assignments
-│   ├── PCB_DESIGN.md             # Layout notes and release checklist
-│   └── FIRMWARE_GUIDE.md         # PlatformIO, DFU, PID, and bring-up guide
-└── .github/assets/
-    └── readme-hero.svg           # Repository overview graphic
-```
-
-## Open the Design
-
-1. Install and open EasyEDA.
-2. Open `PCB Design/Rufajx温控系统.eprj2`.
-3. Review [the pinout](Docs/PINOUT.md) and [hardware description](Docs/HARDWARE.md).
-4. Before manufacturing, complete every blocking item in [the PCB release checklist](Docs/PCB_DESIGN.md).
-
-Firmware source has not yet been added to this repository. [FIRMWARE_GUIDE.md](Docs/FIRMWARE_GUIDE.md) records the intended PlatformIO + Arduino architecture without claiming that a buildable firmware project already exists.
+RS-485 P5 uses pin 1 = B and pin 2 = A. The interface is non-isolated and assumes a verified common ground elsewhere in the machine. The 120 Ω R22 termination must be fitted only when this board is one of the two selected electrical ends of the bus; a passive multi-branch network must not terminate every branch endpoint.
 
 ## External Connections
 
-| Connector | Pin 1 | Pin 2 | Purpose |
+| Connector | Pin 1 | Pin 2 | Function |
 |---|---|---|---|
-| P1 | `K+` | `K-` | K-type thermocouple input |
-| P2 | `GND` | `OUT` | Filtered 0–3.3 V proportional output |
-| P3 | `GND` | `+24V` | Machine control-power input |
+| P1 | K+ | K- | Insulated K-type thermocouple |
+| P2 | GND | 0–5V OUT | Monitored heating command |
+| P3 | GND | +24V | Machine control supply |
+| P4 | NC (L) | COM (L) | Hazardous 220 VAC normally closed contact |
+| P5 | B | A | Two-wire half-duplex RS-485 |
 
-## Current Validation Status
+H1 provides GND, 3V3/VTref, NRST, SWCLK/BOOT0, and SWDIO.
 
-The PCB layout exists, but it is not yet marked production-ready. The latest EasyEDA DRC reported:
+## Documentation
 
-- Two USB-C footprint pad-to-slot clearances of 0.171 mm against a 0.18 mm rule.
-- A schematic-to-PCB netlist mismatch.
-- Several BOM entries without confirmed LCSC ordering codes.
+- [Project and system overview](Docs/README.md)
+- [Hardware reference](Docs/HARDWARE.md)
+- [MCU and connector pinout](Docs/PINOUT.md)
+- [PCB design and manufacturing notes](Docs/PCB_DESIGN.md)
+- [Firmware development guide](Docs/FIRMWARE_GUIDE.md)
+- [Production-readiness actions](Docs/PCB_REQUIRED_FIXES.md)
 
-These are release-blocking items and are documented in [PCB_DESIGN.md](Docs/PCB_DESIGN.md).
+## Repository Layout
+
+- `PCB Design/`: editable EasyEDA project
+- `Docs/`: hardware, pinout, PCB, firmware, and release documentation
+- `.github/assets/`: repository presentation assets
+
+Firmware source has not yet been added. The documented production baseline is VS Code + PlatformIO + STM32Cube HAL/LL, with SWD for development and ROM USB DFU for recovery.
+
+## Release Status
+
+The latest PCB passes strict EasyEDA DRC under the configured rules. This does not prove mains isolation, EMC performance, analog accuracy, relay lifetime, or complete machine safety.
+
+The board is **not approved for 220 VAC production release** in its current layout. The closest measured hazardous-mains-to-SELV separations are below the project's conservative 8 mm target, and the current rules do not enforce a complete mains isolation barrier. RS-485 termination/topology, ESD return paths, analog calibration, real-load behavior, first-article testing, EMC testing, and independent overtemperature protection also require recorded validation.
+
+See [PCB_REQUIRED_FIXES.md](Docs/PCB_REQUIRED_FIXES.md) before ordering a production batch.
 
 ## Safety
 
-- 200–600 °C is the process-temperature target, not the PCB ambient rating.
-- Sensor-open, over-temperature, watchdog, and invalid-data faults must force the command output to 0 V.
-- Use independent hardware over-temperature protection and an emergency heater shutdown path.
-- Keep the controller and MAX6675 cold junction away from the hot-air stream and power-stage heat.
-- Validate the complete machine before unattended operation.
-
-## Project Status
-
-- Hardware schematic: designed
-- PCB layout: designed, validation fixes required
-- Firmware architecture: documented
-- Firmware implementation: not yet included
-- Production qualification: not completed
+- 200–600 °C is the controlled process range, not the permitted PCB ambient temperature.
+- Sensor, reference, DAC, ADC-feedback, watchdog, and timing faults must force the analog command to 0 V.
+- Loss of board power leaves the normally closed P4 contact closed.
+- The complete machine requires independent overtemperature protection and a suitably rated power-interruption path.
+- Do not connect mains during ordinary bench bring-up.
 
 ## Ownership
 
-Developed for **Rufajx** as a custom hot-air machine temperature-control system. All rights are reserved unless the project owner publishes separate licensing terms.
+Developed for **Rufajx** as a custom industrial hot-air temperature-control system. All rights are reserved unless the project owner publishes separate licensing terms.

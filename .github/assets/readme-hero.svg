@@ -40,12 +40,12 @@
   <rect x="650" y="84" width="196" height="72" rx="14" fill="#f7faf8" stroke="#dce9e4"/>
   <circle cx="676" cy="108" r="8" fill="#8267c7"/>
   <text x="694" y="111" fill="#6c7c77" font-family="Segoe UI,Arial,sans-serif" font-size="12">CONTROLLER</text>
-  <text x="674" y="139" fill="#183d35" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="700">STM32C071</text>
+  <text x="674" y="139" fill="#183d35" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="700">STM32G0B1</text>
 
   <rect x="868" y="84" width="160" height="72" rx="14" fill="#f7faf8" stroke="#dce9e4"/>
   <circle cx="894" cy="108" r="8" fill="#37c5a2"/>
   <text x="912" y="111" fill="#6c7c77" font-family="Segoe UI,Arial,sans-serif" font-size="12">LINK</text>
-  <text x="892" y="139" fill="#183d35" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="700">USB-C</text>
+  <text x="892" y="139" fill="#183d35" font-family="Segoe UI,Arial,sans-serif" font-size="16" font-weight="700">USB + RS-485</text>
 
   <rect x="432" y="190" width="310" height="100" rx="16" fill="#eef7f3"/>
   <text x="456" y="216" fill="#557069" font-family="Segoe UI,Arial,sans-serif" font-size="12" letter-spacing="0.8">CONTROL LOOP</text>
@@ -56,6 +56,6 @@
 
   <rect x="800" y="190" width="228" height="100" rx="16" fill="#fff7e8"/>
   <text x="824" y="216" fill="#8b7956" font-family="Segoe UI,Arial,sans-serif" font-size="12" letter-spacing="0.8">OUTPUT</text>
-  <text x="824" y="250" fill="#183d35" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="700">0–3.3 V</text>
-  <text x="824" y="274" fill="#7e745f" font-family="Segoe UI,Arial,sans-serif" font-size="13">Filtered proportional command</text>
+  <text x="824" y="250" fill="#183d35" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="700">0–5 V DAC</text>
+  <text x="824" y="274" fill="#7e745f" font-family="Segoe UI,Arial,sans-serif" font-size="13">Monitored analog command</text>
 </svg>

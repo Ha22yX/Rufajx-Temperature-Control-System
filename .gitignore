@@ -1,5 +1,7 @@
 # EasyEDA automatic backups
 PCB Design/*_backup/
+/.easyeda-bom-request.json
+/pcb_*_latest.png
 
 # Local IDE and build artifacts
 .pio/
